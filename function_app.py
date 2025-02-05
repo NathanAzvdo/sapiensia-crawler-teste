@@ -58,20 +58,34 @@ def SapiensiaCrawler(req: func.HttpRequest) -> func.HttpResponse:
     '''nesse trecho estamos utilizando beautifulSoup, partindo do principio que todos os links
     <a></a> já estão abertos na div cc-q334zl. que no caso é a div que fica o conteudo do menu lateral
     '''
-    sidebar = soup.find('div', {'class': 'cc-q334zl'}) 
-    if sidebar:
-        links = sidebar.find_all('a', href=True)
+    time.sleep(5)  # Espera extra para garantir que todos os links tenham carregado
+
+    links = driver.find_elements(By.CSS_SELECTOR, 'div.cc-q334zl a')
+
+    if links:
+        logging.info(f"Total de links capturados com Selenium: {len(links)}")
+    else:
+        logging.warning("Nenhum link encontrado.")
+
 
     if not os.path.exists('docs'):
         os.makedirs('docs')
 
     #realiza uma iteração pela lista links[] e salva o arquivo HTMl de cada link da lista
     for link in links:
-        page_url = link['href']
+        page_url = link.get_attribute('href')
         if not page_url.startswith('http'):
             page_url = f"https://sapiensia.atlassian.net{page_url}"
+    
+        time.sleep(1)
         
-        page_response = requests.get(page_url)
+        try:
+            page_response = requests.get(page_url, timeout=10)
+            page_response.raise_for_status()
+        except requests.RequestException as e:
+            logging.warning(f"Erro ao acessar {page_url}: {e}")
+            continue
+
         page_soup = BeautifulSoup(page_response.content, 'html.parser')
 
         page_title = page_soup.title.string if page_soup.title else 'untitled'
