@@ -14,37 +14,50 @@ app = func.FunctionApp()
 def SapiensiaCrawler(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
 
-    # Configuração do Selenium para usar Chrome em modo headless
+    '''
+    parte de configuração do selenium. nesse momento a linha--headless está 
+    comentada pois é interessante acompanhar o processo do selenium pela interface.
+    '''
     chrome_options = Options()
     #chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-
     driver = webdriver.Chrome(options=chrome_options)
-
     base_url = "https://sapiensia.atlassian.net/wiki/spaces/SIA/overview?homepageId=578912377"
     driver.get(base_url)
 
-    # Espera a página carregar
+    #aguarda a página carregar por completo
     time.sleep(5)
 
-    # Expande todos os menus e submenus
+    '''Essa função é responsável por abrir todos os menus utilizando Js. Dessa forma, todos os links ficam disponíveis para
+    serem acessados e salvos em html'''
     def expand_all_menus():
-        menus = driver.find_elements(By.CSS_SELECTOR, '.cc-9693te')
-        for menu in menus:
-            try:
-                menu.click()
-                time.sleep(1)  # Espera o menu expandir
-            except Exception as e:
-                logging.warning(f"Erro ao expandir menu: {e}")
+        while True:
+            menus = driver.find_elements(By.CSS_SELECTOR, 'button[data-testid="chevron-right"][aria-expanded="false"]')
+            if not menus:
+                break
+            
+            for menu in menus:
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView();", menu)
+                    time.sleep(.5)
+                    driver.execute_script("arguments[0].click();", menu)
+                    time.sleep(1)
+                except Exception as e:
+                    logging.warning(f"Erro ao expandir menu: {e}")
+
+
 
     expand_all_menus()
+    time.sleep(3)
 
-    # Coleta o HTML da página após expandir os menus
     page_source = driver.page_source
     soup = BeautifulSoup(page_source, 'html.parser')
 
+    '''nesse trecho estamos utilizando beautifulSoup, partindo do principio que todos os links
+    <a></a> já estão abertos na div cc-q334zl. que no caso é a div que fica o conteudo do menu lateral
+    '''
     sidebar = soup.find('div', {'class': 'cc-q334zl'}) 
     if sidebar:
         links = sidebar.find_all('a', href=True)
@@ -52,6 +65,7 @@ def SapiensiaCrawler(req: func.HttpRequest) -> func.HttpResponse:
     if not os.path.exists('docs'):
         os.makedirs('docs')
 
+    #realiza uma iteração pela lista links[] e salva o arquivo HTMl de cada link da lista
     for link in links:
         page_url = link['href']
         if not page_url.startswith('http'):
@@ -60,7 +74,6 @@ def SapiensiaCrawler(req: func.HttpRequest) -> func.HttpResponse:
         page_response = requests.get(page_url)
         page_soup = BeautifulSoup(page_response.content, 'html.parser')
 
-        # Salvar o conteúdo da página em um arquivo HTML
         page_title = page_soup.title.string if page_soup.title else 'untitled'
         filename = f"docs/{page_title.replace('/', '_')}.html"
         with open(filename, 'w', encoding='utf-8') as file:
