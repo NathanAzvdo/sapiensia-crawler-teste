@@ -7,12 +7,24 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 import time
+import re
 
 app = func.FunctionApp()
 
 @app.route(route="SapiensiaCrawler", auth_level=func.AuthLevel.ANONYMOUS)
 def SapiensiaCrawler(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
+    main()
+    return func.HttpResponse("Scraping concluído com sucesso via HTTP Trigger!", status_code=200)
+
+@app.schedule(schedule="0 0 0 0 * *", arg_name="mytimer", run_on_startup=True)
+def SapiensiaCrawlerTimer(mytimer: func.TimerRequest) -> None:
+    logging.info('Python Timer trigger function executed.')
+    main()
+    logging.info('Scraping concluído com sucesso via Timer Trigger.')
+
+
+def main(myTimer:func.TimerRequest):
 
     '''
     parte de configuração do selenium. nesse momento a linha--headless está 
@@ -55,10 +67,13 @@ def SapiensiaCrawler(req: func.HttpRequest) -> func.HttpResponse:
     page_source = driver.page_source
     soup = BeautifulSoup(page_source, 'html.parser')
 
+    if not os.path.exists('docs'):
+        os.makedirs('docs')
+
     '''nesse trecho estamos utilizando beautifulSoup, partindo do principio que todos os links
     <a></a> já estão abertos na div cc-q334zl. que no caso é a div que fica o conteudo do menu lateral
     '''
-    time.sleep(5)  # Espera extra para garantir que todos os links tenham carregado
+    time.sleep(15)  # Espera extra para garantir que todos os links tenham carregado
 
     links = driver.find_elements(By.CSS_SELECTOR, 'div.cc-q334zl a')
 
@@ -68,33 +83,34 @@ def SapiensiaCrawler(req: func.HttpRequest) -> func.HttpResponse:
         logging.warning("Nenhum link encontrado.")
 
 
-    if not os.path.exists('docs'):
-        os.makedirs('docs')
+
+    def sanitize_filename(filename):
+        return re.sub(r'[\/:*?"<>|]', '_', filename)  # Substitui caracteres inválidos
 
     #realiza uma iteração pela lista links[] e salva o arquivo HTMl de cada link da lista
     for link in links:
-        page_url = link.get_attribute('href')
-        if not page_url.startswith('http'):
-            page_url = f"https://sapiensia.atlassian.net{page_url}"
-    
-        time.sleep(1)
-        
         try:
+            page_url = link.get_attribute('href')
+            if not page_url.startswith('http'):
+                page_url = f"https://sapiensia.atlassian.net{page_url}"
+
+            time.sleep(.5)
+
             page_response = requests.get(page_url, timeout=10)
             page_response.raise_for_status()
-        except requests.RequestException as e:
-            logging.warning(f"Erro ao acessar {page_url}: {e}")
+
+            page_soup = BeautifulSoup(page_response.content, 'html.parser')
+
+            page_title = page_soup.title.string if page_soup.title else 'untitled'
+            safe_filename = sanitize_filename(page_title)
+            filename = f"docs/{safe_filename}.html"
+
+            with open(filename, 'w', encoding='utf-8') as file:
+                file.write(str(page_soup))
+
+            logging.info(f"Salvo {page_url} em {filename}")
+
+        except Exception as e:
+            logging.warning(f"Erro ao processar {page_url}: {e}")
             continue
 
-        page_soup = BeautifulSoup(page_response.content, 'html.parser')
-
-        page_title = page_soup.title.string if page_soup.title else 'untitled'
-        filename = f"docs/{page_title.replace('/', '_')}.html"
-        with open(filename, 'w', encoding='utf-8') as file:
-            file.write(str(page_soup))
-
-        logging.info(f"Salvo {page_url} em {filename}")
-
-    driver.quit()
-
-    return func.HttpResponse("Scraping concluído com sucesso!", status_code=200)
