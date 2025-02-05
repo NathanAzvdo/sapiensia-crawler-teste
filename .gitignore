@@ -5,6 +5,9 @@ csx
 edge
 Publish
 
+/venv
+/docs
+
 *.user
 *.suo
 *.cscfg
