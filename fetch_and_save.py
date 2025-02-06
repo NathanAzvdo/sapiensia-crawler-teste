@@ -53,7 +53,8 @@ def save_page_and_children(page, parent_path, processed_pages):
     content_dict = html_to_dict(BeautifulSoup(content, 'html.parser'))
 
     child_pages = get_child_pages(page_id)
-
+    child_pages = [child_page for child_page in child_pages if child_page["title"] != "Sapiensia Help Desk"]
+    print(page["title"], child_pages)
     # Se a página tiver filhos, cria uma pasta para ela
     if child_pages:
         page_path = os.path.join(parent_path, title)
@@ -62,6 +63,7 @@ def save_page_and_children(page, parent_path, processed_pages):
     else:
         # Se não tiver filhos, salva no diretório do pai (sem criar uma pasta nova)
         save_json(content_dict, os.path.join(parent_path, f"{title}.json"))
+        page_path = parent_path
 
     for child_page in child_pages:
         save_page_and_children(child_page, page_path, processed_pages)
