@@ -1,11 +1,15 @@
-import requests
 import re
 import os
 import json
 from bs4 import BeautifulSoup
+from atlassian import Confluence
 
-base_url = "https://sapiensia.atlassian.net/wiki/rest/api"
+base_url = "https://sapiensia.atlassian.net/wiki"
 space_key = "SIA"
+
+confluence = Confluence(
+    url=base_url,
+)
 
 def clean_html(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -37,7 +41,6 @@ def save_json(content, path):
         json.dump(content, file, ensure_ascii=False, indent=4)
     print(f"Saved: {path}")
 
-
 def save_page_and_children(page, parent_path, processed_pages):
     page_id = page["id"]
     if page_id in processed_pages:
@@ -45,39 +48,36 @@ def save_page_and_children(page, parent_path, processed_pages):
     processed_pages.add(page_id)
 
     title = re.sub(r'[\\/*?:"<>|]', "", page["title"])
-    content_url = f"{base_url}/content/{page_id}?expand=body.view"
-    response = requests.get(content_url)
-    response.raise_for_status()
-
-    content = clean_html(response.json()["body"]["view"]["value"])
+    content = confluence.get_page_by_id(page_id, expand='body.view')['body']['view']['value']
+    content = clean_html(content)
     content_dict = html_to_dict(BeautifulSoup(content, 'html.parser'))
 
     child_pages = get_child_pages(page_id)
 
+    # Se a página tiver filhos, cria uma pasta para ela
     if child_pages:
         page_path = os.path.join(parent_path, title)
         os.makedirs(page_path, exist_ok=True)
         save_json(content_dict, os.path.join(page_path, f"{title}.json"))
     else:
+        # Se não tiver filhos, salva no diretório do pai (sem criar uma pasta nova)
         save_json(content_dict, os.path.join(parent_path, f"{title}.json"))
-        page_path = parent_path
 
     for child_page in child_pages:
         save_page_and_children(child_page, page_path, processed_pages)
-    
 
 def get_child_pages(page_id):
-    url = f"{base_url}/content/{page_id}/child/page"
-    response = requests.get(url)
-    response.raise_for_status()
-    return response.json()["results"]
+    return confluence.get_child_pages(page_id)
 
 def fetch_and_save_pages():
-    url = f"{base_url}/content?spaceKey={space_key}&expand=body.view"
-    response = requests.get(url)
-    response.raise_for_status()
-    root_pages = [page for page in response.json()["results"] if page["title"] == "Sapiensia Help Desk"]
+    # Obtendo apenas a página raiz "Sapiensia Help Desk"
+    root_pages = confluence.get_all_pages_from_space(space_key, start=0, limit=1000)
+    root_pages = [page for page in root_pages if page["title"] == "Sapiensia Help Desk"]
     
+    if not root_pages:
+        print("Página raiz 'Sapiensia Help Desk' não encontrada.")
+        return
+
     root_path = os.path.join(os.getcwd(), "documents")
     os.makedirs(root_path, exist_ok=True)
     
