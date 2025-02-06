@@ -12,7 +12,7 @@ def main(myTimer:func.TimerRequest):
 
     try:
         fetch_and_save_pages()
-        logging.info("Scraping concluído com sucesso via Timer Trigger!")
+        logging.info(" concluído com sucesso via Timer Trigger!")
     except Exception as e:
-        logging.error(f"Erro durante o scraping: {str(e)}")
+        logging.error(f"Erro: {str(e)}")
 

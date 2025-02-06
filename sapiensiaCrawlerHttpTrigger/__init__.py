@@ -9,5 +9,5 @@ def main(req: func.HttpRequest, res: func.Out[func.HttpResponse]) -> None:
         fetch_and_save_pages()
         res.set(func.HttpResponse("Requisição feita com sucesso via HTTP Trigger!", status_code=200))
     except Exception as e:
-        logging.error(f"Erro durante o scraping: {str(e)}")
+        logging.error(f"Erro: {str(e)}")
         res.set(func.HttpResponse(f"Erro: {str(e)}", status_code=500))
