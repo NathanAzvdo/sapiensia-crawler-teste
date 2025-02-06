@@ -1,3 +1,4 @@
 azure-functions
 beautifulsoup4
 atlassian-python-api
+azure-storage-blob

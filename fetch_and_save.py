@@ -3,9 +3,12 @@ import os
 import json
 from bs4 import BeautifulSoup
 from atlassian import Confluence
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 
 base_url = "https://sapiensia.atlassian.net/wiki"
 space_key = "SIA"
+connection_string = os.environ["AzureWebJobsStorage"]
+container_name = "sapiensia-help-desk"
 
 confluence = Confluence(
     url=base_url,
@@ -36,10 +39,10 @@ def html_to_dict(element):
         result[element.name].append(html_to_dict(child))
     return result
 
-def save_json(content, path):
-    with open(path, "w", encoding="utf-8") as file:
-        json.dump(content, file, ensure_ascii=False, indent=4)
-    print(f"Saved: {path}")
+# def save_json(content, path):
+#     with open(path, "w", encoding="utf-8") as file:
+#         json.dump(content, file, ensure_ascii=False, indent=4)
+#     print(f"Saved: {path}")
 
 def save_page_and_children(page, parent_path, processed_pages):
     page_id = page["id"]
@@ -80,9 +83,47 @@ def fetch_and_save_pages():
         print("Página raiz 'Sapiensia Help Desk' não encontrada.")
         return
 
-    root_path = os.path.join(os.getcwd(), "documents")
+    root_path = os.path.join(".", "documents")
     os.makedirs(root_path, exist_ok=True)
     
     processed_pages = set()
     for root_page in root_pages:
         save_page_and_children(root_page, root_path, processed_pages)
+
+def fetch_and_save_pages_since(date):
+    cql = f'space="{space_key}" and type=page and lastmodified >= "{date}"'
+    pages = confluence.cql(cql, limit=1000)["results"]
+    
+    if not pages:
+        print(f"Nenhuma página modificada desde {date}.")
+        return
+    
+    root_path = os.path.join(".", "documents")
+    os.makedirs(root_path, exist_ok=True)
+    
+    processed_pages = set()
+    for page in pages:
+        page_id = page["content"]["id"]
+        ancestors = confluence.get_page_ancestors(page_id)
+        if ancestors:
+            parent_path = root_path
+            for ancestor in ancestors:
+                ancestor_title = re.sub(r'[\\/*?:"<>|]', "", ancestor["title"])
+                parent_path = os.path.join(parent_path, ancestor_title)
+                os.makedirs(parent_path, exist_ok=True)
+            save_page_and_children(page["content"], parent_path, processed_pages)
+        else:
+            save_page_and_children(page["content"], root_path, processed_pages)
+
+def save_json(content, blob_name):
+    base_path = "/home/nathan-azevedo/Documentos/sapiensia-crawler-teste"
+    relative_blob_name = os.path.relpath(blob_name, base_path)
+    
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    container_client = blob_service_client.get_container_client(container_name)
+    if not container_client.exists():
+        container_client.create_container()
+
+    blob_client = container_client.get_blob_client(relative_blob_name)
+    blob_client.upload_blob(json.dumps(content, ensure_ascii=False, indent=4), overwrite=True)
+    print(f"Saved to storage account: {relative_blob_name}")
