@@ -2,8 +2,10 @@ import azure.functions as func
 import logging
 from fetch_and_save import *
 import datetime
+from time import time
 
 def main(req: func.HttpRequest, res: func.Out[func.HttpResponse]) -> None:
+    start = time()
     logging.info('Python HTTP trigger started.')
 
     try:
@@ -16,9 +18,13 @@ def main(req: func.HttpRequest, res: func.Out[func.HttpResponse]) -> None:
                 return
         else:
             fetch_and_save_pages()
+            end = time()
+            res.set(func.HttpResponse(f"Requisição completa feita com sucesso via HTTP Trigger! Tempo de execução: {end - start} segundos.", status_code=200))  
+        
         if date:
             fetch_and_save_pages_since(date)
-            res.set(func.HttpResponse(f"Requisição incremental feita com sucesso desde {date} via HTTP Trigger!", status_code=200))
+            end = time()
+            res.set(func.HttpResponse(f"Requisição completa feita com sucesso via HTTP Trigger! Tempo de execução: {end - start} segundos.", status_code=200))
     except Exception as e:
         logging.error(f"Erro: {str(e)}")
         res.set(func.HttpResponse(f"Erro: {str(e)}", status_code=500))
