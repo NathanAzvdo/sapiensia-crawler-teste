@@ -39,12 +39,8 @@ def html_to_dict(element):
         result[element.name].append(html_to_dict(child))
     return result
 
-# def save_json(content, path):
-#     with open(path, "w", encoding="utf-8") as file:
-#         json.dump(content, file, ensure_ascii=False, indent=4)
-#     print(f"Saved: {path}")
-
 def save_page_and_children(page, parent_path, processed_pages):
+    
     page_id = page["id"]
     if page_id in processed_pages:
         return
@@ -53,19 +49,16 @@ def save_page_and_children(page, parent_path, processed_pages):
     title = re.sub(r'[\\/*?:"<>|]', "", page["title"])
     content = confluence.get_page_by_id(page_id, expand='body.view')['body']['view']['value']
     content = clean_html(content)
-    content_dict = html_to_dict(BeautifulSoup(content, 'html.parser'))
 
     child_pages = get_child_pages(page_id)
     child_pages = [child_page for child_page in child_pages if child_page["title"] != "Sapiensia Help Desk"]
     print(page["title"], child_pages)
-    # Se a página tiver filhos, cria uma pasta para ela
+    
     if child_pages:
         page_path = os.path.join(parent_path, title)
-        os.makedirs(page_path, exist_ok=True)
-        save_json(content_dict, os.path.join(page_path, f"{title}.json"))
+        save_html(content, f"{page_path}/{title}.html")
     else:
-        # Se não tiver filhos, salva no diretório do pai (sem criar uma pasta nova)
-        save_json(content_dict, os.path.join(parent_path, f"{title}.json"))
+        save_html(content, f"{parent_path}/{title}.html")
         page_path = parent_path
 
     for child_page in child_pages:
@@ -83,8 +76,7 @@ def fetch_and_save_pages():
         print("Página raiz 'Sapiensia Help Desk' não encontrada.")
         return
 
-    root_path = os.path.join(".", "documents")
-    os.makedirs(root_path, exist_ok=True)
+    root_path = "documents"
     
     processed_pages = set()
     for root_page in root_pages:
@@ -98,8 +90,7 @@ def fetch_and_save_pages_since(date):
         print(f"Nenhuma página modificada desde {date}.")
         return
     
-    root_path = os.path.join(".", "documents")
-    os.makedirs(root_path, exist_ok=True)
+    root_path = "documents"
     
     processed_pages = set()
     for page in pages:
@@ -110,13 +101,12 @@ def fetch_and_save_pages_since(date):
             for ancestor in ancestors:
                 ancestor_title = re.sub(r'[\\/*?:"<>|]', "", ancestor["title"])
                 parent_path = os.path.join(parent_path, ancestor_title)
-                os.makedirs(parent_path, exist_ok=True)
             save_page_and_children(page["content"], parent_path, processed_pages)
         else:
             save_page_and_children(page["content"], root_path, processed_pages)
 
-def save_json(content, blob_name):
-    base_path = "/home/nathan-azevedo/Documentos/sapiensia-crawler-teste"
+def save_html(content, blob_name):
+    base_path = "documents"
     relative_blob_name = os.path.relpath(blob_name, base_path)
     
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
@@ -125,5 +115,5 @@ def save_json(content, blob_name):
         container_client.create_container()
 
     blob_client = container_client.get_blob_client(relative_blob_name)
-    blob_client.upload_blob(json.dumps(content, ensure_ascii=False, indent=4), overwrite=True)
+    blob_client.upload_blob(content, overwrite=True)
     print(f"Saved to storage account: {relative_blob_name}")
